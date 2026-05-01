@@ -27,7 +27,8 @@ Open the `index.html` file in any web browser. It shows an animated simulation o
 
 ## Hardware You Need
 
-**1. ESP32 Development Board**
+**1. ESP32 Development Board**  <img width="232" height="234" alt="image" src="https://github.com/user-attachments/assets/36f7b008-c92b-4d32-a709-bccec2be9428" />
+
 
 Any standard ESP32 dev board works. These cost around 3 to 5 USD and are widely available online. It handles the WiFi connection, keeps track of the schedule, and controls the servo and buzzer.
 
