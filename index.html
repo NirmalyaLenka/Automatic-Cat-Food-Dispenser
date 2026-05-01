@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Cat Food Dispenser</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0f0d0a;
+      --panel:     #1a1612;
+      --border:    #2e2820;
+      --accent:    #e8903a;
+      --accent2:   #f0c060;
+      --green:     #5dcf8a;
+      --red:       #e05555;
+      --text:      #f0e8d8;
+      --muted:     #7a6e5e;
+      --servo-cw:  #f0c060;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 60px;
+      overflow-x: hidden;
+    }
+
+    /* Background grain texture */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .page-wrap { position: relative; z-index: 1; width: 100%; max-width: 860px; }
+
+    /* ---- HEADER ---- */
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    header .eyebrow {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 4px;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    header h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.1;
+    }
+    header h1 span { color: var(--accent); }
+    header p {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.8;
+    }
+
+    /* ---- SCENE WRAPPER ---- */
+    .scene-container {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 40px 30px 30px;
+      margin-bottom: 32px;
+      position: relative;
+      overflow: hidden;
+    }
+    .scene-container::after {
+      content: 'LIVE SIMULATION';
+      position: absolute;
+      top: 12px; right: 16px;
+      font-size: 9px;
+      letter-spacing: 3px;
+      color: var(--accent);
+      opacity: 0.6;
+    }
+
+    /* ---- SVG SCENE ---- */
+    #scene-svg {
+      display: block;
+      width: 100%;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* ---- STATUS BAR ---- */
+    .status-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 8px 16px;
+      font-size: 11px;
+      letter-spacing: 1px;
+    }
+    .status-pill .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.4s;
+      flex-shrink: 0;
+    }
+    .status-pill.active .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .status-pill.warning .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+    .status-pill.closed .dot  { background: var(--red); }
+
+    #status-valve-text  { color: var(--text); transition: color 0.3s; }
+    #status-buzzer-text { color: var(--text); transition: color 0.3s; }
+    #status-cat-text    { color: var(--text); transition: color 0.3s; }
+
+    /* ---- CONTROLS ---- */
+    .controls {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    button {
+      font-family: 'Space Mono', monospace;
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 12px 28px;
+      border-radius: 2px;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    button:active { transform: scale(0.97); }
+    .btn-feed {
+      background: var(--accent);
+      color: #0f0d0a;
+      font-weight: 700;
+    }
+    .btn-feed:hover { opacity: 0.85; }
+    .btn-reset {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .btn-reset:hover { border-color: var(--muted); color: var(--text); }
+    button:disabled { opacity: 0.35; pointer-events: none; }
+
+    /* ---- LOG ---- */
+    .log-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 16px 20px;
+      margin-top: 20px;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    .log-line {
+      font-size: 11px;
+      line-height: 2;
+      color: var(--muted);
+    }
+    .log-line .ts { color: var(--accent); margin-right: 8px; }
+    .log-line.highlight { color: var(--text); }
+
+    /* ---- INFO CARDS ---- */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-top: 32px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 22px;
+    }
+    .card-label {
+      font-size: 9px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .card-value {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .card-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* ---- FOOD PARTICLES ---- */
+    .food-particle {
+      animation: fallDown 0.6s ease-in forwards;
+      opacity: 0;
+    }
+    @keyframes fallDown {
+      0%   { transform: translateY(0);   opacity: 1; }
+      100% { transform: translateY(120px); opacity: 0; }
+    }
+
+    /* ---- CAT ---- */
+    #cat-group {
+      transition: none;
+    }
+
+    /* Buzzer rings */
+    .ring {
+      animation: ringPulse 0.5s ease-out forwards;
+      opacity: 0;
+    }
+    @keyframes ringPulse {
+      0%   { r: 6;  opacity: 0.9; stroke-width: 2; }
+      100% { r: 22; opacity: 0;   stroke-width: 0.5; }
+    }
+
+    /* Servo needle */
+    #servo-needle {
+      transform-origin: 515px 200px;
+      transform-box: fill-box;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Valve door */
+    #valve-door {
+      transform-origin: 298px 310px;
+      transform-box: fill-box;
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Schedule mini table */
+    .sched-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .sched-table td { font-size: 11px; padding: 5px 0; color: var(--muted); }
+    .sched-table td:last-child { text-align: right; }
+    .sched-table .active-row td { color: var(--accent); }
+
+    /* Time display */
+    #clock-display {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    /* Scrollbar */
+    .log-box::-webkit-scrollbar { width: 4px; }
+    .log-box::-webkit-scrollbar-track { background: transparent; }
+    .log-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header>
+    <div class="eyebrow">ESP32 + DS3225MG Servo</div>
+    <h1>Auto Cat Food<br><span>Dispenser</span></h1>
+    <p>Every 4 hours, a servo-controlled valve opens for 3 seconds. No feeding after 9 PM. The buzzer calls your cat before each meal.</p>
+  </header>
+
+  <!-- SCENE -->
+  <div class="scene-container">
+    <svg id="scene-svg" viewBox="0 0 700 440" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- Floor -->
+      <rect x="0" y="390" width="700" height="50" fill="#141210"/>
+      <line x1="0" y1="390" x2="700" y2="390" stroke="#2e2820" stroke-width="1.5"/>
+
+      <!-- ============================
+           DISPENSER BODY
+      ============================= -->
+      <!-- Main hopper/tank -->
+      <rect x="230" y="100" width="140" height="180" rx="4" fill="#1e1a15" stroke="#3a3028" stroke-width="1.5"/>
+      <!-- Tank label -->
+      <text x="300" y="145" text-anchor="middle" fill="#3a3028" font-family="Space Mono" font-size="9" letter-spacing="2">FOOD HOPPER</text>
+
+      <!-- Food pellets inside tank (static, decorative) -->
+      <circle cx="265" cy="200" r="5" fill="#c27820" opacity="0.6"/>
+      <circle cx="285" cy="215" r="4" fill="#d4882a" opacity="0.5"/>
+      <circle cx="300" cy="205" r="5" fill="#c27820" opacity="0.6"/>
+      <circle cx="315" cy="218" r="4" fill="#d4882a" opacity="0.5"/>
+      <circle cx="330" cy="200" r="5" fill="#c27820" opacity="0.6"/>
+      <circle cx="275" cy="230" r="4" fill="#d4882a" opacity="0.4"/>
+      <circle cx="295" cy="240" r="5" fill="#c27820" opacity="0.4"/>
+      <circle cx="320" cy="232" r="4" fill="#d4882a" opacity="0.4"/>
+      <circle cx="270" cy="175" r="4" fill="#c27820" opacity="0.3"/>
+      <circle cx="310" cy="168" r="5" fill="#d4882a" opacity="0.3"/>
+      <circle cx="330" cy="178" r="4" fill="#c27820" opacity="0.3"/>
+
+      <!-- Hopper neck / chute -->
+      <polygon points="250,280 350,280 335,310 265,310" fill="#1a1612" stroke="#3a3028" stroke-width="1.5"/>
+
+      <!-- Valve housing -->
+      <rect x="265" y="308" width="70" height="20" rx="2" fill="#252015" stroke="#3a3028" stroke-width="1.5"/>
+
+      <!-- Valve door (rotates) -->
+      <!-- pivot at left edge of chute opening -->
+      <g id="valve-door">
+        <rect x="268" y="312" width="64" height="10" rx="2" fill="#e8903a" opacity="0.9"/>
+        <!-- hinge dot -->
+        <circle cx="270" cy="317" r="3" fill="#f0c060"/>
+      </g>
+
+      <!-- Chute tube below valve -->
+      <rect x="285" y="328" width="30" height="32" fill="#1a1612" stroke="#3a3028" stroke-width="1"/>
+
+      <!-- Output spout -->
+      <polygon points="278,358 322,358 330,370 270,370" fill="#1a1612" stroke="#3a3028" stroke-width="1.5"/>
+
+      <!-- ============================
+           FOOD PARTICLES (spawned by JS)
+      ============================= -->
+      <g id="food-particles"></g>
+
+      <!-- ============================
+           SERVO MODULE
+      ============================= -->
+      <!-- Servo body box -->
+      <rect x="488" y="175" width="70" height="52" rx="4" fill="#1e1a15" stroke="#3a3028" stroke-width="1.5"/>
+      <text x="523" y="196" text-anchor="middle" fill="#3a3028" font-family="Space Mono" font-size="7" letter-spacing="1.5">DS3225MG</text>
+      <text x="523" y="207" text-anchor="middle" fill="#3a3028" font-family="Space Mono" font-size="7" letter-spacing="1">25kg SERVO</text>
+      <!-- Servo horn circle -->
+      <circle cx="515" cy="200" r="14" fill="#252015" stroke="#4a4030" stroke-width="1.5"/>
+      <circle cx="515" cy="200" r="4" fill="#3a3028"/>
+
+      <!-- Servo needle (angle shows valve state) -->
+      <line id="servo-needle" x1="515" y1="200" x2="515" y2="188" stroke="#f0c060" stroke-width="2.5" stroke-linecap="round"/>
+
+      <!-- Wire from servo to ESP32 dashed line -->
+      <line x1="488" y1="201" x2="440" y2="201" stroke="#3a3028" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="440" y1="201" x2="440" y2="260" stroke="#3a3028" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="440" y1="260" x2="395" y2="260" stroke="#3a3028" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- Wire connecting servo to valve (visual) -->
+      <line x1="488" y1="214" x2="440" y2="214" stroke="#e8903a" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+      <line x1="440" y1="214" x2="440" y2="317" stroke="#e8903a" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+      <line x1="440" y1="317" x2="335" y2="317" stroke="#e8903a" stroke-width="1" stroke-dasharray="3,3" opacity="0.4"/>
+
+      <!-- ============================
+           ESP32 BOARD
+      ============================= -->
+      <rect x="358" y="228" width="80" height="52" rx="3" fill="#101e14" stroke="#1e4030" stroke-width="1.5"/>
+      <text x="398" y="248" text-anchor="middle" fill="#2d6040" font-family="Space Mono" font-size="7" letter-spacing="1.5">ESP32</text>
+      <!-- chip -->
+      <rect x="376" y="252" width="24" height="18" rx="1" fill="#0a1a10" stroke="#1e4030"/>
+      <text x="388" y="264" text-anchor="middle" fill="#2d6040" font-family="Space Mono" font-size="5.5">MCU</text>
+      <!-- wifi symbol -->
+      <path d="M408 258 Q418 250 428 258" fill="none" stroke="#5dcf8a" stroke-width="1.5" opacity="0.6"/>
+      <path d="M411 262 Q418 256 425 262" fill="none" stroke="#5dcf8a" stroke-width="1.5" opacity="0.7"/>
+      <circle cx="418" cy="266" r="1.5" fill="#5dcf8a" opacity="0.8"/>
+
+      <!-- ============================
+           BUZZER
+      ============================= -->
+      <circle cx="420" cy="160" r="16" fill="#1e1a15" stroke="#3a3028" stroke-width="1.5"/>
+      <circle cx="420" cy="160" r="8" fill="#252015" stroke="#4a4030" stroke-width="1"/>
+      <circle cx="420" cy="160" r="3" fill="#3a3028"/>
+      <text x="420" y="185" text-anchor="middle" fill="#3a3028" font-family="Space Mono" font-size="7" letter-spacing="1">BUZZER</text>
+      <!-- Wire buzzer to ESP32 -->
+      <line x1="420" y1="176" x2="420" y2="228" stroke="#3a3028" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- Buzzer rings (added by JS) -->
+      <g id="buzzer-rings">
+        <circle id="ring1" cx="420" cy="160" r="6" fill="none" stroke="#f0c060" stroke-width="2" opacity="0"/>
+        <circle id="ring2" cx="420" cy="160" r="6" fill="none" stroke="#f0c060" stroke-width="2" opacity="0"/>
+        <circle id="ring3" cx="420" cy="160" r="6" fill="none" stroke="#f0c060" stroke-width="2" opacity="0"/>
+      </g>
+
+      <!-- ============================
+           FOOD BOWL
+      ============================= -->
+      <!-- bowl shadow -->
+      <ellipse cx="140" cy="393" rx="55" ry="6" fill="#000" opacity="0.4"/>
+      <!-- bowl body -->
+      <path d="M88 380 Q88 400 140 400 Q192 400 192 380 Z" fill="#252015" stroke="#3a3028" stroke-width="1.5"/>
+      <ellipse cx="140" cy="380" rx="52" ry="10" fill="#1a1612" stroke="#3a3028" stroke-width="1.5"/>
+      <!-- bowl rim highlight -->
+      <ellipse cx="140" cy="380" rx="52" ry="10" fill="none" stroke="#3a3028" stroke-width="3"/>
+      <!-- BOWL food (appears when valve opens) -->
+      <g id="bowl-food" opacity="0">
+        <ellipse cx="140" cy="393" rx="38" ry="5" fill="#c27820" opacity="0.7"/>
+        <circle cx="128" cy="391" r="4" fill="#d4882a"/>
+        <circle cx="143" cy="389" r="4.5" fill="#c27820"/>
+        <circle cx="156" cy="391" r="4" fill="#d4882a"/>
+        <circle cx="135" cy="394" r="3.5" fill="#e09030"/>
+        <circle cx="150" cy="394" r="3.5" fill="#c27820"/>
+      </g>
+      <!-- bowl label -->
+      <text x="140" y="415" text-anchor="middle" fill="#3a3028" font-family="Space Mono" font-size="8" letter-spacing="2">FOOD BOWL</text>
+
+      <!-- ============================
+           CAT (SVG drawn)
+      ============================= -->
+      <g id="cat-group" transform="translate(560, 330)">
+        <!-- cat body -->
+        <ellipse cx="0" cy="35" rx="30" ry="22" fill="#d4a060"/>
+        <!-- cat head -->
+        <circle cx="-8" cy="10" r="20" fill="#d4a060"/>
+        <!-- ears -->
+        <polygon points="-22,-8 -28,8 -14,8" fill="#d4a060"/>
+        <polygon points="-22,-8 -26,5 -15,5" fill="#e8b888" opacity="0.6"/>
+        <polygon points="6,-10 14,5 0,5" fill="#d4a060"/>
+        <polygon points="6,-10 12,4 1,4" fill="#e8b888" opacity="0.6"/>
+        <!-- face -->
+        <circle cx="-13" cy="10" r="4.5" fill="#fff" opacity="0.95"/>
+        <circle cx="-2" cy="10" r="4.5" fill="#fff" opacity="0.95"/>
+        <circle cx="-12" cy="11" r="2.5" fill="#1a1008"/>
+        <circle cx="-1" cy="11" r="2.5" fill="#1a1008"/>
+        <!-- eye shine -->
+        <circle cx="-11" cy="10" r="1" fill="#fff" opacity="0.8"/>
+        <circle cx="0" cy="10" r="1" fill="#fff" opacity="0.8"/>
+        <!-- nose -->
+        <polygon points="-7,17 -4,17 -5.5,19.5" fill="#e07070"/>
+        <!-- mouth -->
+        <path d="M-5.5 19.5 Q-8 23 -10 22" fill="none" stroke="#8a4030" stroke-width="1"/>
+        <path d="M-5.5 19.5 Q-3 23 -1 22" fill="none" stroke="#8a4030" stroke-width="1"/>
+        <!-- whiskers -->
+        <line x1="-28" y1="16" x2="-14" y2="17" stroke="#f5e0c0" stroke-width="0.8" opacity="0.7"/>
+        <line x1="-28" y1="19" x2="-14" y2="19" stroke="#f5e0c0" stroke-width="0.8" opacity="0.7"/>
+        <line x1="10" y1="16" x2="-2" y2="17" stroke="#f5e0c0" stroke-width="0.8" opacity="0.7"/>
+        <line x1="10" y1="19" x2="-2" y2="19" stroke="#f5e0c0" stroke-width="0.8" opacity="0.7"/>
+        <!-- stripes -->
+        <path d="M-30 30 Q-25 28 -22 32" fill="none" stroke="#b88840" stroke-width="1.5" opacity="0.5"/>
+        <path d="M-32 38 Q-27 36 -24 40" fill="none" stroke="#b88840" stroke-width="1.5" opacity="0.5"/>
+        <!-- tail -->
+        <path id="cat-tail" d="M28 42 Q55 20 50 5 Q46-5 38 0" fill="none" stroke="#d4a060" stroke-width="8" stroke-linecap="round"/>
+        <!-- legs -->
+        <rect x="-18" y="50" width="10" height="14" rx="4" fill="#c49050"/>
+        <rect x="-4" y="50" width="10" height="14" rx="4" fill="#c49050"/>
+        <rect x="10" y="50" width="10" height="14" rx="4" fill="#c49050"/>
+        <rect x="22" y="52" width="10" height="12" rx="4" fill="#c49050"/>
+        <!-- paw tips -->
+        <ellipse cx="-13" cy="64" rx="6" ry="3" fill="#b88040"/>
+        <ellipse cx="1" cy="64" rx="6" ry="3" fill="#b88040"/>
+        <ellipse cx="15" cy="64" rx="6" ry="3" fill="#b88040"/>
+        <ellipse cx="27" cy="64" rx="6" ry="3" fill="#b88040"/>
+      </g>
+
+      <!-- ============================
+           LABELS & ANNOTATIONS
+      ============================= -->
+      <!-- angle label -->
+      <text id="angle-label" x="515" y="222" text-anchor="middle" fill="#7a6e5e" font-family="Space Mono" font-size="9">90deg CLOSED</text>
+
+      <!-- bowl food label line -->
+      <line x1="270" y1="370" x2="195" y2="385" stroke="#3a3028" stroke-width="1" stroke-dasharray="3,3"/>
+
+      <!-- title label top left -->
+      <rect x="20" y="20" width="160" height="42" rx="2" fill="#1a1612" stroke="#2e2820" stroke-width="1"/>
+      <text x="100" y="37" text-anchor="middle" fill="#7a6e5e" font-family="Space Mono" font-size="8" letter-spacing="2">NEXT FEEDING</text>
+      <text id="scene-next-feed" x="100" y="54" text-anchor="middle" fill="#e8903a" font-family="Syne, sans-serif" font-size="18" font-weight="700">--:--</text>
+
+      <!-- State badge -->
+      <rect x="20" y="72" width="160" height="28" rx="2" fill="#1a1612" stroke="#2e2820" stroke-width="1"/>
+      <circle id="state-dot" cx="35" cy="86" r="5" fill="#3a3028"/>
+      <text id="state-label" x="50" y="90" fill="#7a6e5e" font-family="Space Mono" font-size="9" letter-spacing="1">STANDBY</text>
+
+    </svg>
+
+    <!-- STATUS PILLS -->
+    <div class="status-bar">
+      <div class="status-pill" id="pill-valve">
+        <div class="dot"></div>
+        <span id="status-valve-text">VALVE CLOSED</span>
+      </div>
+      <div class="status-pill" id="pill-buzzer">
+        <div class="dot"></div>
+        <span id="status-buzzer-text">BUZZER OFF</span>
+      </div>
+      <div class="status-pill" id="pill-cat">
+        <div class="dot"></div>
+        <span id="status-cat-text">CAT AWAY</span>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="log-box" id="log-box">
+      <div class="log-line"><span class="ts">BOOT</span> System initialized. Valve closed at 90 degrees.</div>
+      <div class="log-line"><span class="ts">BOOT</span> Waiting for feeding schedule...</div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
+      <button class="btn-feed" id="btn-feed" onclick="runFeedingCycle()">Simulate Feed Cycle</button>
+      <button class="btn-reset" id="btn-reset" onclick="resetScene()">Reset</button>
+    </div>
+  </div>
+
+  <!-- INFO CARDS -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Current Time</div>
+      <div class="card-value" id="clock-display">--:--:--</div>
+      <div class="card-sub">India Standard Time (UTC+5:30)</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Feeding Schedule</div>
+      <table class="sched-table" id="sched-table">
+        <tr><td>08:00</td><td>--</td></tr>
+        <tr><td>12:00</td><td>--</td></tr>
+        <tr><td>16:00</td><td>--</td></tr>
+        <tr><td>20:00</td><td>--</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-label">Servo Config</div>
+      <div class="card-value">DS3225MG</div>
+      <div class="card-sub">25 kg/cm torque at 6V<br>0 deg = open  /  90 deg = closed</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Valve Open Duration</div>
+      <div class="card-value">3 sec</div>
+      <div class="card-sub">Followed by 3 buzzer beeps<br>Night cutoff after 21:00</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ================================================================
+  // CLOCK
+  // ================================================================
+  const FEED_HOURS = [8, 12, 16, 20];
+
+  function getNextFeedTime(now) {
+    const h = now.getHours();
+    const m = now.getMinutes();
+    for (const fh of FEED_HOURS) {
+      if (fh > h || (fh === h && m === 0)) return fh;
+    }
+    return FEED_HOURS[0]; // wrap to tomorrow
+  }
+
+  function updateClock() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    document.getElementById('clock-display').textContent =
+      `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
+    const h = now.getHours();
+    const m = now.getMinutes();
+
+    // Update feed schedule table
+    const rows = document.querySelectorAll('#sched-table tr');
+    FEED_HOURS.forEach((fh, i) => {
+      const isActive = (fh === h && m < 5) || false;
+      const isPast = h > fh || (h === fh && m >= 5);
+      const isBlocked = fh >= 21;
+      rows[i].className = isActive ? 'active-row' : '';
+      rows[i].cells[1].textContent = isBlocked ? 'BLOCKED' : isPast ? 'DONE' : 'WAITING';
+      rows[i].cells[1].style.color = isBlocked ? '#e05555' : isPast ? '#3a3028' : '#5dcf8a';
+    });
+
+    // Next feed
+    const nf = getNextFeedTime(now);
+    document.getElementById('scene-next-feed').textContent = `${pad(nf)}:00`;
+  }
+
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // ================================================================
+  // LOG
+  // ================================================================
+  function addLog(msg, highlight = false) {
+    const box = document.getElementById('log-box');
+    const div = document.createElement('div');
+    div.className = 'log-line' + (highlight ? ' highlight' : '');
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const ts = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    div.innerHTML = `<span class="ts">${ts}</span> ${msg}`;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // ================================================================
+  // STATUS PILLS
+  // ================================================================
+  function setStatus(id, state, text) {
+    const pill = document.getElementById('pill-' + id);
+    pill.className = 'status-pill ' + state;
+    document.getElementById('status-' + id + '-text').textContent = text;
+  }
+
+  // ================================================================
+  // SVG HELPERS
+  // ================================================================
+  const svgNS = 'http://www.w3.org/2000/svg';
+
+  // rotate servo needle
+  function setServoAngle(deg) {
+    // needle points up at 0 deg, rotates CW for higher angles
+    document.getElementById('servo-needle').style.transform = `rotate(${deg}deg)`;
+    document.getElementById('angle-label').textContent = `${deg}deg ${deg === 90 ? 'CLOSED' : deg === 0 ? 'OPEN' : ''}`;
+  }
+
+  // open/close valve door
+  function setValveDoor(open) {
+    // open = rotate away (rotate ~90deg), closed = 0
+    document.getElementById('valve-door').style.transform = open ? 'rotate(-90deg)' : 'rotate(0deg)';
+  }
+
+  // spawn food particles falling from spout
+  function spawnFoodParticles() {
+    const container = document.getElementById('food-particles');
+    container.innerHTML = '';
+    const count = 12;
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const x = 285 + Math.random() * 30;
+        const y = 365 + Math.random() * 6;
+        const g = document.createElementNS(svgNS, 'g');
+        g.classList.add('food-particle');
+        g.style.animationDelay = `${Math.random() * 0.4}s`;
+
+        const c = document.createElementNS(svgNS, 'circle');
+        c.setAttribute('cx', x);
+        c.setAttribute('cy', y);
+        c.setAttribute('r', 3 + Math.random() * 2);
+        c.setAttribute('fill', Math.random() > 0.5 ? '#d4882a' : '#c27820');
+        g.appendChild(c);
+        container.appendChild(g);
+
+        // clean up
+        setTimeout(() => g.remove(), 800);
+      }, i * 120);
+    }
+  }
+
+  // show food in bowl
+  function showBowlFood(visible) {
+    document.getElementById('bowl-food').style.opacity = visible ? 1 : 0;
+    document.getElementById('bowl-food').style.transition = 'opacity 0.5s';
+  }
+
+  // move cat (walking in from right / out to right)
+  let catX = 560;
+  let catAnim = null;
+
+  function moveCat(targetX, duration, cb) {
+    if (catAnim) cancelAnimationFrame(catAnim);
+    const start = catX;
+    const startTime = performance.now();
+
+    function step(now) {
+      const t = Math.min((now - startTime) / duration, 1);
+      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      catX = start + (targetX - start) * ease;
+      document.getElementById('cat-group').setAttribute('transform', `translate(${catX}, 330)`);
+      if (t < 1) {
+        catAnim = requestAnimationFrame(step);
+      } else {
+        catX = targetX;
+        if (cb) cb();
+      }
+    }
+    catAnim = requestAnimationFrame(step);
+  }
+
+  // buzzer ring animation
+  function animateBuzzerRing(ringId, delay) {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        const r = document.getElementById(ringId);
+        r.style.animation = 'none';
+        void r.offsetWidth; // reflow
+        r.style.animation = 'ringPulse 0.5s ease-out forwards';
+        setTimeout(resolve, 500);
+      }, delay);
+    });
+  }
+
+  // pulse buzzer visually x3
+  async function animateBuzzer() {
+    setStatus('buzzer', 'warning', 'BUZZER BEEPING');
+    addLog('Buzzer: 3 beeps to call the cat...', true);
+    await animateBuzzerRing('ring1', 0);
+    await animateBuzzerRing('ring2', 500);
+    await animateBuzzerRing('ring3', 1000);
+    setStatus('buzzer', '', 'BUZZER OFF');
+  }
+
+  // update state badge
+  function setStateBadge(state, color) {
+    document.getElementById('state-label').textContent = state;
+    document.getElementById('state-dot').setAttribute('fill', color);
+  }
+
+  // ================================================================
+  // FEEDING CYCLE
+  // ================================================================
+  let isRunning = false;
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async function runFeedingCycle() {
+    if (isRunning) return;
+    isRunning = true;
+    document.getElementById('btn-feed').disabled = true;
+    document.getElementById('btn-reset').disabled = true;
+
+    setStateBadge('FEEDING', '#e8903a');
+    addLog('Feeding cycle started.', true);
+
+    // === STEP 1: Buzzer ===
+    await animateBuzzer();
+    await sleep(400);
+
+    // === STEP 2: Cat walks in ===
+    setStatus('cat', 'active', 'CAT APPROACHING');
+    addLog('Cat is coming to the bowl...');
+    setStateBadge('CAT ARRIVING', '#f0c060');
+    await new Promise(resolve => moveCat(150, 1800, resolve));
+    setStatus('cat', 'active', 'CAT AT BOWL');
+    addLog('Cat arrived at the bowl.');
+    await sleep(400);
+
+    // === STEP 3: Open valve ===
+    addLog('Servo rotating to 0 degrees — valve OPEN.', true);
+    setStatus('valve', 'active', 'VALVE OPEN');
+    setStateBadge('VALVE OPEN', '#5dcf8a');
+    setServoAngle(0);
+    setValveDoor(true);
+
+    // Spawn food particles repeatedly for 3 seconds
+    let particleInterval = setInterval(spawnFoodParticles, 350);
+    await sleep(3000);
+    clearInterval(particleInterval);
+    showBowlFood(true);
+
+    // === STEP 4: Close valve ===
+    addLog('Servo rotating to 90 degrees — valve CLOSED.');
+    setServoAngle(90);
+    setValveDoor(false);
+    setStatus('valve', 'closed', 'VALVE CLOSED');
+    setStateBadge('VALVE CLOSED', '#e05555');
+    await sleep(600);
+
+    // === STEP 5: Cat eats ===
+    addLog('Cat is eating...');
+    setStatus('cat', 'active', 'CAT EATING');
+    setStateBadge('CAT EATING', '#5dcf8a');
+    await sleep(2800);
+
+    // === STEP 6: Cat leaves ===
+    addLog('Cat done eating. Returning to sleep.');
+    setStatus('cat', '', 'CAT AWAY');
+    await new Promise(resolve => moveCat(580, 1600, resolve));
+    setStateBadge('STANDBY', '#3a3028');
+
+    addLog('Feeding cycle complete. Next cycle in 4 hours.', true);
+    isRunning = false;
+    document.getElementById('btn-feed').disabled = false;
+    document.getElementById('btn-reset').disabled = false;
+  }
+
+  // ================================================================
+  // RESET
+  // ================================================================
+  function resetScene() {
+    if (isRunning) return;
+    if (catAnim) cancelAnimationFrame(catAnim);
+    catX = 560;
+    document.getElementById('cat-group').setAttribute('transform', `translate(560, 330)`);
+    setServoAngle(90);
+    setValveDoor(false);
+    showBowlFood(false);
+    setStatus('valve', '', 'VALVE CLOSED');
+    setStatus('buzzer', '', 'BUZZER OFF');
+    setStatus('cat', '', 'CAT AWAY');
+    setStateBadge('STANDBY', '#3a3028');
+    document.getElementById('food-particles').innerHTML = '';
+    ['ring1','ring2','ring3'].forEach(id => {
+      const r = document.getElementById(id);
+      r.style.animation = 'none';
+      r.style.opacity = '0';
+    });
+    document.getElementById('log-box').innerHTML =
+      '<div class="log-line"><span class="ts">RST</span> Scene reset. System in standby.</div>';
+  }
+
+  // Initial servo position
+  setServoAngle(90);
+</script>
+</body>
+</html>
