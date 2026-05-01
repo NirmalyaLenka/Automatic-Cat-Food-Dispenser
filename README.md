@@ -31,7 +31,8 @@ Open the `index.html` file in any web browser. It shows an animated simulation o
 
 Any standard ESP32 dev board works. These cost around 3 to 5 USD and are widely available online. It handles the WiFi connection, keeps track of the schedule, and controls the servo and buzzer.
 
-**2. DS3225MG High-Torque Servo**
+**2. DS3225MG High-Torque Servo** <img width="297" height="274" alt="image" src="https://github.com/user-attachments/assets/7509546e-f550-40c1-8532-85ac7dcf715f" />
+
 
 This is the specific servo recommended for this project. It provides 25 kg/cm of torque at 6V, which is more than enough to reliably open and close a food valve even if kibble gets wedged in the mechanism. Do not use a small 9g servo for this. A stuck valve could mean your cat does not get fed or cannot stop being fed.
 
