@@ -195,6 +195,26 @@ MIT License. Free to use, modify, and share for personal and commercial projects
 
 ---
 
+## Skills & technologies
+
+`Arduino/C++` · `HTML/CSS`
+
+
+## Repository structure
+
+Key files and folders (not exhaustive):
+
+- `README.md`
+- `cat_feeder.ino`
+- `gitignore (2)`
+- `index.html`
+
+
+## How it works
+
+The main firmware sketch is `cat_feeder.ino`. Open it in Arduino IDE, verify the board, pin mapping and library requirements, then compile and upload. Test hardware behaviour on the real circuit before relying on it.
+
+
 ## Maintenance & Audit
 
 - **Audit date:** 10 November 2026
