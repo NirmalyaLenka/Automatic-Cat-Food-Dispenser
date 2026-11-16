@@ -1,6 +1,6 @@
 # Automatic-Cat-Food-Dispenser 
 
-A simple but reliable automatic cat food dispenser built with an ESP32 microcontroller. It feeds your cat at fixed times throughout the day, stops feeding at night, and plays a short buzzer sound before# each meal so your cat learns when to expect food.
+An ESP32-based automatic cat-feeder prototype. It schedules a servo-operated gate and buzzer; the current design has important failure modes and is not a verified unattended feeding appliance. It feeds your cat at fixed times throughout the day, stops feeding at night, and plays a short buzzer sound before# each meal so your cat learns when to expect food.
 
 ---
 
@@ -15,7 +15,7 @@ Each time a feeding is due:
 3. Food falls through the chute into the bowl for 3 seconds.
 4. The servo rotates back to 90 degrees, closing the valve.
 
-The time is kept accurate automatically. The ESP32 connects to your WiFi and pulls the correct time from an internet time server (NTP). You do not need a separate real-time clock module.
+The firmware attempts to obtain time from an internet NTP server over Wi-Fi; it does not include a separate real-time clock. If local time is unavailable, the loop reports an error and skips dispensing while `getLocalTime()` continues to fail. A successful startup message alone is not proof that scheduled feeding will remain reliable.
 
 ---
 
@@ -35,13 +35,7 @@ Any standard ESP32 dev board works. These cost around 3 to 5 USD and are widely 
 **2. DS3225MG High-Torque Servo** <img width="297" height="274" alt="image" src="https://github.com/user-attachments/assets/7509546e-f550-40c1-8532-85ac7dcf715f" />
 
 
-This is the specific servo recommended for this project. It provides 25 kg/cm of torque at 6V, which is more than enough to reliably open and close a food valve even if kibble gets wedged in the mechanism. Do not use a small 9g servo for this. A stuck valve could mean your cat does not get fed or cannot stop being fed.
-
-Alternative high-torque servos that also work:
-- Savox SC-1268SG (32 kg/cm, more expensive but very durable)
-- LewanSoul LDX-335 (35 kg/cm, good value for the torque)
-
-All three are standard PWM servos and are compatible with this code without any changes.
+Select a servo based on the actual gate load and the servo manufacturer's voltage and stall-current specifications. This repository does not validate servo torque, jam behavior, or compatibility of alternative models. Bench-test the linkage and gate repeatedly before adding food; do not assume that a listed servo can safely force a jammed mechanism.
 
 **3. Active Buzzer (5V)**
 
@@ -49,7 +43,7 @@ A small cylindrical active buzzer. "Active" means it makes noise on its own when
 
 **4. Power Supply**
 
-The servo needs a dedicated 5V power supply rated for at least 2A. Do not power the servo from the ESP32's onboard 5V or 3.3V pins. The current draw when the servo moves can crash the ESP32 or damage it. The ESP32 itself can be powered via USB from a phone charger.
+The wiring example uses a separate 5V servo supply, but verify the exact servo's permitted voltage and stall current before connecting it. Size the supply and wiring for that load. Do not power the servo from an ESP32 GPIO or 3.3V rail. Join the supply ground to ESP32 GND so the PWM signal has a common reference.
 
 **5. Wiring and Enclosure**
 
@@ -90,7 +84,7 @@ Go to Sketch > Include Library > Manage Libraries. Search for "ESP32Servo" and i
 
 **Step 4 — Open the Code**
 
-Open the file `cat_feeder.ino` in Arduino IDE.
+Create a local sketch folder named `cat_feeder`, copy `cat_feeder.ino` into it, and open that local sketch in Arduino IDE. This does not rename or move the repository's tracked files.
 
 **Step 5 — Enter Your WiFi Details**
 
@@ -137,7 +131,7 @@ Find this line:
 
     #define NO_FEED_AFTER_HOUR  21
 
-Change 21 to whatever hour (in 24-hour format) you want the feeding to stop. Setting it to 22 means no feeding at or after 10 PM.
+Change 21 to the cutoff hour (24-hour format). The current logic checks `NO_FEED_AFTER_HOUR`; the separate `LAST_FEED_HOUR` constant is defined in the sketch but is not used by the current scheduling logic.
 
 ---
 
@@ -157,7 +151,7 @@ The servo controls a physical gate or paddle inside the chute above the food bow
 
 After 3 seconds, the servo returns to 90 degrees and the gate closes again.
 
-The DS3225MG servo has enough torque to force the gate open even if dried kibble is partially blocking it. Smaller servos may stall in this situation, which is why a high-torque servo is specifically recommended.
+The firmware does not sense a jam or confirm that the gate fully opened or closed. Gate geometry, servo torque, supply voltage, and food flow must be validated on the actual mechanism; the timed movement alone does not prove a successful or safe feed.
 
 ---
 
@@ -180,6 +174,23 @@ Make sure you have an "active" buzzer, not a "passive" one. A passive buzzer req
 
 ---
 
+## First-run safety checklist
+
+1. Test with the food hopper empty and the gate disconnected or safely unloaded. Keep fingers clear of the servo linkage; the servo moves to its closed angle during startup.
+2. Confirm the servo's rated supply voltage and stall current before powering it. Use a separate, appropriately rated supply and a common ground.
+3. Verify the Wi-Fi connection, NTP time, timezone, and printed feeding schedule in Serial Monitor at 115200 baud.
+4. Measure actual portions over repeated trials before using the mechanism with food. A three-second opening is a time setting, not a calibrated portion measurement.
+5. Do not leave the prototype as the animal's sole food source or unattended until power-loss, Wi-Fi/NTP failure, jammed-gate, over-dispense, and restart scenarios have been tested.
+
+## Known limitations
+
+- There is no dedicated RTC. The firmware depends on Wi-Fi/NTP time; when time cannot be read, scheduled dispensing is skipped.
+- The last-feed guard is held in RAM rather than persisted. A reset around a scheduled minute can cause a feed to be repeated.
+- There is no feedback for food quantity, an empty hopper, a jam, or the physical gate position. The firmware cannot prove that a portion was dispensed or that the valve sealed.
+- `index.html` is a standalone browser animation, not a live dashboard connected to the ESP32.
+- The repository contains `gitignore (2)`, not a standard `.gitignore` filename, and no root `LICENSE` file is present. The README's MIT statement should be backed by an actual license file before redistribution.
+- Firmware and hardware were not compiled or tested during this documentation review.
+
 ## Project File List
 
     cat_feeder.ino    Main firmware — upload this to the ESP32
@@ -190,7 +201,7 @@ Make sure you have an "active" buzzer, not a "passive" one. A passive buzzer req
 
 ## License
 
-MIT License. Free to use, modify, and share for personal and commercial projects. No warranty is provided.
+The README states that the project is MIT-licensed, but no `LICENSE` file is present in the current root tree. Confirm the intended license and add a standard license file before redistributing the project.
 
 
 ---
