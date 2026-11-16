@@ -1,6 +1,6 @@
 # Automatic-Cat-Food-Dispenser 
 
-An ESP32-based automatic cat-feeder prototype. It schedules a servo-operated gate and buzzer; the current design has important failure modes and is not a verified unattended feeding appliance. It feeds your cat at fixed times throughout the day, stops feeding at night, and plays a short buzzer sound before# each meal so your cat learns when to expect food.
+An ESP32-based automatic cat-feeder prototype. It schedules a servo-operated gate and buzzer, with default feed times and a nightly cutoff. The current design has important failure modes and is not a verified unattended feeding appliance.
 
 ---
 
